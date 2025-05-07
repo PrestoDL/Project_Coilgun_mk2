@@ -1,5 +1,5 @@
 # Project_Coilgun_mk2
-Project Coilgun MK2.
+Multi-Level, Semi-Auto Coilgun Project.
 
 
 Testing Video in my Channel : 
