@@ -278,14 +278,19 @@ const int CNY1 = A3;
 
 
 
-int functionState = 3; // light/laser setting by function key
+// int functionState = 3; // light/laser setting by function key
 // 0 : led off, laser off
 // 1 : led off, laser on
 // 2 : led on, laser off
 // 3 : led on, laser on
-int voltage = 0; // capacitor voltage display
-int velocityCheck = 0; // for measure velocity
-int triggerPushed = 0; // check trigger pushed
+// int triggerPushed = 0; // check trigger pushed
+
+uint8_t stateFlag = 0b00000000;
+// 7 - 3 : null
+// 2 : triggerPushed
+// 1 : functionState - led
+// 0 : functionState - laser
+
 int functionPushed = 0; // check function pushed
 int breechblockQueue = 0; // brechblock animation queue
 int motorQueue = 0; // motor initiate queue
@@ -295,6 +300,7 @@ unsigned long motorTime = 0;
 unsigned long mainTime = 0;
 unsigned long launchTime = 0;
 int velocityTime = 0;
+int voltage = 0; // capacitor voltage display
 
 
 
@@ -346,7 +352,7 @@ void setup() {
   lightControl(launchQueue);
 }
 
-void oledDisplay(int voltage, int velocity, int functionState, int launchQueue, int* breechblockQueue) {
+void oledDisplay(int voltage, int velocity, uint8_t stateFlag, int launchQueue, int* breechblockQueue) {
   char inttostring[4];
 
   display.clearDisplay();
@@ -398,7 +404,7 @@ void oledDisplay(int voltage, int velocity, int functionState, int launchQueue, 
   display.drawLine(79, 12, 79, 15, WHITE);
 
   // LED on
-  if (functionState % 4 > 1) {
+  if ((stateFlag & (1 << 1)) == 1) {
     display.drawLine(79, 9, 82, 6, WHITE);
     display.drawLine(80, 6, 82, 6, WHITE);
     display.drawLine(82, 8, 82, 6, WHITE);
@@ -418,7 +424,7 @@ void oledDisplay(int voltage, int velocity, int functionState, int launchQueue, 
   display.drawLine(110, 15, 111, 15, WHITE);
 
   // laser on
-  if (functionState % 2 == 1) {
+  if ((stateFlag & (1 << 0)) == 1) {
     display.drawLine(110, 6, 110, 9, WHITE);
     display.drawLine(111, 6, 111, 9, WHITE);
     display.drawLine(110, 18, 110, 21, WHITE);
@@ -478,9 +484,9 @@ void motorMove(int motorQueue) {
 }
 
 void lightControl(int launchQueue) {
-  digitalWrite(LASER, functionState % 2);
+  digitalWrite(LASER, stateFlag & (1 << 0));
 
-  if (functionState % 4 > 1) {
+  if ((stateFlag & (1 << 1)) == 1) {
     if (launchQueue == 0) {
       digitalWrite(LED_1, HIGH);
       digitalWrite(LED_2, HIGH);
@@ -589,15 +595,15 @@ void loop() {
 
     if ((micros() - mainTime) >= (1000000 / MAINFPS)) { // for main FPS
       // Trigger Control
-      if ((digitalRead(TRIGGER) == LOW) && (triggerPushed == 0) && (analogRead(VOL) > (LEASTVOLTAGE * 2.5))) { // push
+      if ((digitalRead(TRIGGER) == LOW) && ((stateFlag & (1 << 2)) == 0) && (analogRead(VOL) > (LEASTVOLTAGE * 2.5))) { // push
         digitalWrite(RELAY, LOW);
         launchQueue = launch(&velocityTime);
-        triggerPushed++;
+        stateFlag |= (1 << 2);
         digitalWrite(RELAY, HIGH);
       }
 
-      else if ((digitalRead(TRIGGER) == HIGH) && (triggerPushed > 0)) { // pull
-        triggerPushed = 0;
+      else if ((digitalRead(TRIGGER) == HIGH) && ((stateFlag & (1 << 2)) != 0)) { // pull
+        stateFlag &= ~(1 << 2);
       }
 
 
@@ -615,13 +621,14 @@ void loop() {
       }
 
       if (functionPushed == (MAINFPS * FUNCTIONLONG)) { // pushed (long)
-        functionState++;
+        uint8_t tempFlag = ((stateFlag & 0b11) + 1) % 4;
+        stateFlag = (stateFlag & ~0b11) | tempFlag;
       }
 
 
 
       lightControl(launchQueue);
-      oledDisplay(analogRead(VOL) * 0.4, 186000 / velocityTime, functionState, launchQueue, &breechblockQueue);
+      oledDisplay(analogRead(VOL) * 0.4, 186000 / velocityTime, stateFlag, launchQueue, &breechblockQueue);
 
       if (launchQueue > 0) { launchQueue--; }
       else if (launchQueue < 0) { launchQueue++; }
